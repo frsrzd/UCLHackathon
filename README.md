@@ -30,6 +30,9 @@ In the viewer, pick a **tactic** to see its top 15 centers, scored and ranked by
 at that moment; click a **center** on the field (or pick him under PLAYER) for his rank,
 suitability % and attribute breakdown. Run every test with `python -m pytest`.
 
+[README_BACKEND.md](README_BACKEND.md) has the full command list, a step-by-step test
+checklist, the API reference and how every number is calculated.
+
 ## Layout
 
 ```
