@@ -3,31 +3,40 @@ Animated formation / play viewer with a slider.
 
 Run it
 ------
-    python -m backend.formation_viewer                 # bundled Big Data Bowl data
+    python app.py                                      # 1. the backend API (another terminal)
+    python -m backend.formation_viewer                 # 2. bundled Big Data Bowl data
     python -m backend.formation_viewer --demo          # synthetic plays
     python -m backend.formation_viewer --data path/to/bdb
+    python -m backend.formation_viewer --api http://127.0.0.1:5001   # API address
 
 For --data, the folder needs plays.csv and the tracking files, either as
     path/to/bdb/tracking_<gameId>.csv   or   path/to/bdb/tracking/tracking_<gameId>.csv
 players.csv and pffScoutingData.csv are used for names/positions if present.
 
 Headless test (no window, saves one frame):
-    python formation_viewer.py --snapshot out.png --formation I_FORM --frame 30
+    python -m backend.formation_viewer --snapshot out.png --formation I_FORM --frame 30
 
 Needs: pandas, numpy, matplotlib (Tkinter ships with most Python installs).
 
 In the window: pick a formation and a play, press Play or drag the slider,
-choose a player-analysis tactic, then click a player to highlight them and see
-their trail and tactic-priority metrics on the right. A metric is read only
-when a loaded data column matches its displayed name; unavailable values are
-identified instead of inferred from tracking data.
+choose a tactic, then click a player to highlight them and see their trail on
+the right. Tactic rankings come from the backend's Flask API (backend/api.py),
+which scores and ranks the centers afresh on every request: with no player
+selected the panel lists the tactic's top 15; select a center to see his rank,
+suitability and attribute breakdown. If the API is not running, the panel says
+how to start it.
 """
 import argparse
+import json
 import os
 from pathlib import Path
+from urllib import error, parse, request
 
 import numpy as np
 import pandas as pd
+
+from backend import config
+from backend.tactics import TACTICS
 
 FPS = 10
 SNAP_FRAME = 11          # demo plays: frame at which the ball is snapped
@@ -35,76 +44,91 @@ LOS_X = 60.0             # demo plays: line of scrimmage (offense moves to +x)
 Y_MID = 26.65
 COLORS = {"offense": "#1f77b4", "defense": "#d62728", "ball": "#8b4513"}
 
-# The displayed order is the user's priority order for each protection tactic.
-# Keep these as labels (rather than deriving or estimating statistics) because
-# the tracking data loaded by this viewer does not normally contain these rates.
-TACTIC_ATTRIBUTES = {
-    "Traditional dropback": (
-        "Loss rate", "Pressure rate", "Sack rate", "Weight", "Penalty rate",
-    ),
-    "Play-action": (
-        "PA loss rate", "PA pressure rate", "Overall loss rate",
-        "PA sack rate", "Weight", "Penalty rate",
-    ),
-    "Rollouts": (
-        "Rollout loss rate", "Rollout pressure rate", "Lateral speed",
-        "Overall loss rate", "Weight", "Penalty rate",
-    ),
-    "Stunt & twist": (
-        "Switch-block loss rate", "Switch-block pressure rate",
-        "Overall loss rate", "Penalty rate", "Weight",
-    ),
-    "Blitz pickup": (
-        "Loss rate vs 5+ rushers", "Pressure rate vs 5+",
-        "Sack rate vs 5+", "Weight", "Overall loss rate",
-    ),
-    "Long-developing": (
-        "Long-play loss rate", "Long-play pressure rate",
-        "Depth lost at 3s", "Sack rate", "Weight", "Penalty rate",
-    ),
-}
+# ----------------------------------------------------------------------------
+# Tactic rankings from the backend (Flask API started with `python app.py`)
+# ----------------------------------------------------------------------------
+# Tactic names and the priority order of their attributes come from
+# backend/tactics.py; every number (rank, suitability, values, scores) comes from
+# the API, which scores and ranks the centers afresh on each request.
+TACTIC_KEYS = {t["name"]: key for key, t in TACTICS.items()}   # dropdown label -> key
+DEFAULT_API_URL = f"http://{config.API_HOST}:{config.API_PORT}"
+TOP_N = config.DEFAULT_LIMIT
 
 
-def _normalized_column_name(name):
-    """Normalize spacing/case only; do not guess at semantically similar fields."""
-    return " ".join(str(name).replace("_", " ").strip().casefold().split())
+class BackendUnavailable(RuntimeError):
+    """The Flask API could not be reached, or answered with an error."""
 
 
-def tactic_metric_values(df, player_key, tactic):
-    """Read exact-named tactic metrics for one player, without deriving values."""
-    attributes = TACTIC_ATTRIBUTES.get(tactic, ())
-    player_rows = df.loc[df["key"] == player_key] if "key" in df.columns else df.iloc[0:0]
-    columns = {_normalized_column_name(column): column for column in df.columns}
-    values = {}
+class RankingsClient:
+    """Reads tactic rankings from the backend's Flask API (backend/api.py)."""
 
-    for attribute in attributes:
-        column = columns.get(_normalized_column_name(attribute))
-        if column is None:
-            values[attribute] = "Not available in loaded data"
-            continue
+    def __init__(self, base_url=DEFAULT_API_URL, timeout=3.0):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        # Talk to the local server directly, never through a system proxy.
+        self._opener = request.build_opener(request.ProxyHandler({}))
 
-        present = player_rows[column].dropna()
-        if present.empty:
-            values[attribute] = "Missing for this player"
-            continue
+    def rankings(self, tactic_key, limit=config.MAX_LIMIT):
+        """GET /api/rankings for one tactic: every ranked center (up to `limit`), best first."""
+        query = parse.urlencode({"tactic": tactic_key, "limit": limit})
+        return self._get(f"/api/rankings?{query}")
 
-        unique = present.drop_duplicates()
-        if len(unique) > 1:
-            values[attribute] = "Varies by frame"
-        else:
-            values[attribute] = str(unique.iloc[0])
-    return values
+    def _get(self, path):
+        url = self.base_url + path
+        try:
+            with self._opener.open(url, timeout=self.timeout) as response:
+                return json.load(response)
+        except error.HTTPError as err:              # the API answered {"error": ...}
+            try:
+                message = json.load(err).get("error")
+            except (ValueError, AttributeError):
+                message = None
+            raise BackendUnavailable(message or f"HTTP {err.code} from {url}") from None
+        except (error.URLError, OSError):           # nothing listening, or a timeout
+            raise BackendUnavailable(
+                f"Backend API not reachable at {self.base_url}. Start it with "
+                "`python app.py`, then pick the tactic again.") from None
 
 
-def format_tactic_metrics(tactic, values=None):
-    """Format the selected tactic's metrics in their declared priority order."""
-    if tactic not in TACTIC_ATTRIBUTES:
-        return ""
-    values = values or {}
-    return "\n".join(
-        f"{attribute}: {values.get(attribute, 'Not available in loaded data')}"
-        for attribute in TACTIC_ATTRIBUTES[tactic]
-    )
+def tactic_priorities(tactic_key):
+    """The tactic's attribute labels in importance order (backend/tactics.py)."""
+    return [attr.label for attr in TACTICS[tactic_key]["attributes"]]
+
+
+def find_player(ranking, nfl_id):
+    """The /api/rankings entry for `nfl_id`, or None if he is not ranked."""
+    return next((p for p in ranking["players"] if p["nflId"] == nfl_id), None)
+
+
+def format_top_ranking(ranking, n=TOP_N):
+    """The first n centers of a /api/rankings response, one line each."""
+    players = ranking["players"][:n]
+    lines = [f"{ranking['tacticName']}: top {len(players)} centers",
+             "(scored and ranked by the backend just now)", ""]
+    lines += [f"{p['rank']:>2}. {p['name']} ({p['team']})  ·  {p['suitability']:.1f}%  ·  "
+              f"{p['confidence']}" for p in players]
+    return "\n".join(lines)
+
+
+def format_player_ranking(ranking, nfl_id):
+    """One center's rank, suitability and attribute breakdown for the tactic."""
+    p = find_player(ranking, nfl_id)
+    if p is None:
+        return (f"{ranking['tacticName']}\nNot ranked: only centers with at least "
+                f"{config.MIN_BASE_SNAPS} pass-block snaps at C are ranked.")
+    labels = {c["key"]: c["label"] for c in ranking["columns"]}
+    lines = [ranking["tacticName"],
+             f"Rank {p['rank']} of {len(ranking['players'])}  ·  "
+             f"suitability {p['suitability']:.1f}%",
+             f"Confidence {p['confidence']} ({p['tacticSnaps']} tactic snaps, "
+             f"{p['baseSnaps']} base snaps)", ""]
+    for c in ranking["columns"]:
+        a = p["attributes"][c["key"]]
+        lines.append(f"{c['label']}: {a['display']}  "
+                     f"(score {a['score']}/100, weight {c['weight']:.0%})")
+    lines += ["", f"Top strength: {labels[p['topStrength']]}",
+              f"Biggest concern: {labels[p['biggestConcern']]}"]
+    return "\n".join(lines)
 
 
 # ----------------------------------------------------------------------------
@@ -358,19 +382,6 @@ class RealSource:
             if "officialPosition" in m:
                 has = m.officialPosition.notna().to_numpy()
                 df.loc[has, "position"] = m.officialPosition.to_numpy()[has]
-
-            # Retain available player-level priorities (such as a players.csv
-            # Weight column) in the play frame for the details panel. Other
-            # unrecognized player fields remain unused by this presentation.
-            metric_names = {
-                _normalized_column_name(attribute)
-                for attributes in TACTIC_ATTRIBUTES.values()
-                for attribute in attributes
-            }
-            for column in self.players.columns:
-                if (_normalized_column_name(column) in metric_names
-                        and column not in df.columns):
-                    df[column] = m[column].to_numpy()
         if self.pff is not None:
             sub = self.pff[(self.pff.gameId == gid) & (self.pff.playId == pid)]
             mp = dict(zip(sub.nflId, sub.pff_positionLinedUp))
@@ -482,25 +493,27 @@ class FieldRenderer:
         j = int(np.nanargmin(d))
         return p["keys"][j] if d[j] <= radius else None
 
-    def describe(self, key, i, tactic=None):
+    def describe(self, key, i):
         p = self.p
         c = p["keys"].index(key)
         m = p["meta"].loc[key]
         s = p["S"][:, c]
         dist = np.nansum(s) / FPS
         j = "" if pd.isna(m.jerseyNumber) else f"#{int(m.jerseyNumber)}"
-        details = (f"{m.displayName} {j}\n"
-                   f"position : {m.position}\n"
-                   f"side     : {m.side}\n\n"
-                   f"Play tracking (not tactic metrics)\n"
-                   f"speed now: {s[i]:.1f} yd/s\n"
-                   f"top speed: {np.nanmax(s):.1f} yd/s\n"
-                   f"distance : {dist:.1f} yd (whole play)\n"
-                   f"x, y     : {p['X'][i, c]:.1f}, {p['Y'][i, c]:.1f}")
-        if tactic in TACTIC_ATTRIBUTES:
-            details += (f"\n\n{tactic} priorities\n"
-                        f"{format_tactic_metrics(tactic, tactic_metric_values(self.df, key, tactic))}")
-        return details
+        return (f"{m.displayName} {j}\n"
+                f"position : {m.position}\n"
+                f"side     : {m.side}\n\n"
+                f"Play tracking (not tactic metrics)\n"
+                f"speed now: {s[i]:.1f} yd/s\n"
+                f"top speed: {np.nanmax(s):.1f} yd/s\n"
+                f"distance : {dist:.1f} yd (whole play)\n"
+                f"x, y     : {p['X'][i, c]:.1f}, {p['Y'][i, c]:.1f}")
+
+    def center_key(self):
+        """Tracking key of the player lined up at C in this play, if any."""
+        positions = self.p["meta"]["position"]
+        centers = positions.index[positions == config.CENTER_POSITION]
+        return centers[0] if len(centers) else None
 
 
 def player_options(meta):
@@ -533,7 +546,8 @@ def frame_status(prepared, index):
 # ----------------------------------------------------------------------------
 # Tk app
 # ----------------------------------------------------------------------------
-def run_gui(source):
+def run_gui(source, client=None):
+    client = client or RankingsClient()
     import matplotlib
     matplotlib.use("TkAgg")
     import tkinter as tk
@@ -561,8 +575,10 @@ def run_gui(source):
                     font=("Segoe UI", 9))
     style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
     style.configure("TCombobox", padding=4)
+    # ranking: the latest /api/rankings response for the chosen tactic (or None);
+    # ranking_error: why it could not be fetched (or None).
     state = dict(playing=False, speed=1.0, selected=None, plays=[],
-                 player_labels={}, after_id=None)
+                 player_labels={}, after_id=None, ranking=None, ranking_error=None)
 
     root.columnconfigure(0, weight=1)
     root.rowconfigure(2, weight=1)
@@ -586,7 +602,7 @@ def run_gui(source):
     player_cb = ttk.Combobox(controls, state="readonly", width=24)
     player_cb.grid(row=1, column=2, sticky="ew", padx=(0, 12), pady=(3, 0))
     ttk.Label(controls, text="TACTIC ANALYSIS", style="Hint.TLabel").grid(row=0, column=3, sticky="w")
-    tactic_cb = ttk.Combobox(controls, values=list(TACTIC_ATTRIBUTES), state="readonly")
+    tactic_cb = ttk.Combobox(controls, values=list(TACTIC_KEYS), state="readonly")
     tactic_cb.grid(row=1, column=3, sticky="ew", pady=(3, 0))
     tactic_cb.set("")
 
@@ -645,7 +661,8 @@ def run_gui(source):
     speed_cb.grid(row=0, column=5, padx=(10, 0))
     frame_label = ttk.Label(playback, text="Frame —", width=30, anchor="e")
     frame_label.grid(row=1, column=0, columnspan=5, sticky="w", pady=(5, 0))
-    source_status = ttk.Label(root, text=source.label, style="Subtitle.TLabel", anchor="w")
+    source_status = ttk.Label(root, text=f"{source.label}  ·  rankings from {client.base_url}",
+                              style="Subtitle.TLabel", anchor="w")
     source_status.grid(row=4, column=0, sticky="ew", padx=18, pady=(0, 8))
 
     def set_info(text):
@@ -670,6 +687,39 @@ def run_gui(source):
         btn.config(state="disabled")
         slider.config(state="disabled")
 
+    def fetch_ranking():
+        """Ask the API for the chosen tactic's ranking; the backend computes it afresh."""
+        key = TACTIC_KEYS.get(tactic_cb.get())
+        state["ranking"], state["ranking_error"] = None, None
+        if key is None:
+            return
+        try:
+            state["ranking"] = client.rankings(key)
+        except BackendUnavailable as exc:
+            state["ranking_error"] = str(exc)
+
+    def tactic_text(selected):
+        """Tactic panel text: the selected player's breakdown, or the top 15."""
+        key = TACTIC_KEYS.get(tactic_cb.get())
+        if key is None:
+            return ""
+        ranking = state["ranking"]
+        if ranking is None:
+            priorities = "\n".join(f"{n}. {label}"
+                                   for n, label in enumerate(tactic_priorities(key), start=1))
+            return (f"{tactic_cb.get()}\n{state['ranking_error'] or 'No ranking loaded.'}"
+                    f"\n\nPriority attributes\n{priorities}")
+        if selected is not None:
+            return format_player_ranking(ranking, selected)
+        text = format_top_ranking(ranking)
+        center = renderer.center_key()
+        if center is not None:
+            name = renderer.p["meta"].loc[center, "displayName"]
+            p = find_player(ranking, center)
+            text += (f"\n\nCenter in this play: {name}, "
+                     + (f"rank {p['rank']} ({p['suitability']:.1f}%)" if p else "not ranked"))
+        return text + "\n\nClick a center on the field to see his breakdown."
+
     def render(i):
         if renderer.p is None:
             return
@@ -682,21 +732,16 @@ def run_gui(source):
             selected_status.config(
                 text=f"{selected.displayName}  ·  {selected.position}  ·  {selected.side}"
             )
-            set_info(renderer.describe(state["selected"], i, tactic_cb.get()))
-        elif tactic_cb.get() in TACTIC_ATTRIBUTES:
-            tactic = tactic_cb.get()
-            priorities = "\n".join(
-                f"{n}. {attribute}"
-                for n, attribute in enumerate(TACTIC_ATTRIBUTES[tactic], start=1)
-            )
-            selected_status.config(text=f"Analysis tactic: {tactic}")
-            set_info(f"Priority attributes\n\n{priorities}\n\n"
-                     "Select a player to inspect values available in the loaded data.")
+            details = renderer.describe(state["selected"], i)
+            ranking_text = tactic_text(state["selected"])
+            set_info(f"{ranking_text}\n\n{details}" if ranking_text else details)
+        elif TACTIC_KEYS.get(tactic_cb.get()):
+            selected_status.config(text=f"Tactic: {tactic_cb.get()}")
+            set_info(tactic_text(None))
         else:
             selected_status.config(text="No player selected")
-            set_info("Choose a player to view play-tracking details. "
-                     "Select a tactic to see its priority attributes and any matching "
-                     "values present in the loaded data.")
+            set_info("Choose a player to view play-tracking details. Select a tactic to "
+                     "see its top 15 centers, then click a center for his breakdown.")
 
     def update_player_choices():
         labels, state["player_labels"] = player_options(renderer.p["meta"])
@@ -711,6 +756,12 @@ def run_gui(source):
             label = next((label for label, player_key in state["player_labels"].items()
                           if player_key == key), "")
             player_cb.set(label)
+        if TACTIC_KEYS.get(tactic_cb.get()):
+            fetch_ranking()                     # fresh ranking for each new selection
+        render(slider.get())
+
+    def on_tactic(_=None):
+        fetch_ranking()
         render(slider.get())
 
     def goto(i):
@@ -818,7 +869,7 @@ def run_gui(source):
     play_cb.bind("<<ComboboxSelected>>", load_play)
     player_cb.bind("<<ComboboxSelected>>", on_player_selected)
     speed_cb.bind("<<ComboboxSelected>>", on_speed)
-    tactic_cb.bind("<<ComboboxSelected>>", lambda _=None: render(slider.get()))
+    tactic_cb.bind("<<ComboboxSelected>>", on_tactic)
     canvas.mpl_connect("button_press_event", on_click)
     def close():
         state["playing"] = False
@@ -847,6 +898,8 @@ def main():
     ap.add_argument("--formation", help="formation for --snapshot")
     ap.add_argument("--variant", type=int, default=0, help="play index for --snapshot")
     ap.add_argument("--frame", type=int, default=None, help="frame index for --snapshot")
+    ap.add_argument("--api", default=DEFAULT_API_URL,
+                    help=f"backend API address for tactic rankings (default {DEFAULT_API_URL})")
     args = ap.parse_args()
 
     source = build_source(args.data, demo=args.demo)
@@ -880,7 +933,7 @@ def main():
         print("saved", args.snapshot)
         return
 
-    run_gui(source)
+    run_gui(source, RankingsClient(args.api))
 
 
 if __name__ == "__main__":

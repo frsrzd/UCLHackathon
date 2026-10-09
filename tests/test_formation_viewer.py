@@ -1,79 +1,95 @@
+import socket
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from backend.formation_viewer import (
-    TACTIC_ATTRIBUTES,
+    TACTIC_KEYS,
+    BackendUnavailable,
     DemoSource,
+    RankingsClient,
     RealSource,
     build_source,
+    format_player_ranking,
+    format_top_ranking,
     frame_status,
-    format_tactic_metrics,
     player_options,
-    tactic_metric_values,
+    tactic_priorities,
 )
+from backend.tactics import TACTICS
+
+# A trimmed /api/rankings response, shaped like backend/service.py builds it.
+SAMPLE_RANKING = {
+    "tactic": "stunt_twist",
+    "tacticName": "Stunt & twist handling",
+    "trackingUsed": False,
+    "columns": [
+        {"key": "sw_loss_rate", "label": "Switch-block loss rate", "weight": 0.6,
+         "better": "lower", "format": "pct"},
+        {"key": "weight_lb", "label": "Weight", "weight": 0.4, "better": "target",
+         "format": "lb", "target": 305},
+    ],
+    "players": [
+        {"rank": 1, "nflId": 53492, "name": "Creed Humphrey", "team": "KC", "age": None,
+         "suitability": 97.0, "confidence": "Low", "tacticSnaps": 16, "baseSnaps": 339,
+         "attributes": {
+             "sw_loss_rate": {"value": 0.022, "display": "2.2%", "score": 100,
+                              "ideal": 0.058, "floor": 0.198},
+             "weight_lb": {"value": 316, "display": "316 lb", "score": 70,
+                           "ideal": 305, "floor": None}},
+         "topStrength": "sw_loss_rate", "biggestConcern": "weight_lb"},
+        {"rank": 2, "nflId": 34472, "name": "Alex Mack", "team": "SF", "age": 35,
+         "suitability": 94.7, "confidence": "Low", "tacticSnaps": 4, "baseSnaps": 218,
+         "attributes": {
+             "sw_loss_rate": {"value": 0.075, "display": "7.5%", "score": 88,
+                              "ideal": 0.058, "floor": 0.198},
+             "weight_lb": {"value": 311, "display": "311 lb", "score": 95,
+                           "ideal": 305, "floor": None}},
+         "topStrength": "sw_loss_rate", "biggestConcern": "sw_loss_rate"},
+    ],
+}
 
 
-def test_all_attribute_orders_match_user_priorities():
-    expected = {
-        "Traditional dropback": (
-            "Loss rate", "Pressure rate", "Sack rate", "Weight", "Penalty rate",
-        ),
-        "Play-action": (
-            "PA loss rate", "PA pressure rate", "Overall loss rate",
-            "PA sack rate", "Weight", "Penalty rate",
-        ),
-        "Rollouts": (
-            "Rollout loss rate", "Rollout pressure rate", "Lateral speed",
-            "Overall loss rate", "Weight", "Penalty rate",
-        ),
-        "Stunt & twist": (
-            "Switch-block loss rate", "Switch-block pressure rate",
-            "Overall loss rate", "Penalty rate", "Weight",
-        ),
-        "Blitz pickup": (
-            "Loss rate vs 5+ rushers",
-            "Pressure rate vs 5+",
-            "Sack rate vs 5+",
-            "Weight",
-            "Overall loss rate",
-        ),
-        "Long-developing": (
-            "Long-play loss rate", "Long-play pressure rate",
-            "Depth lost at 3s", "Sack rate", "Weight", "Penalty rate",
-        ),
-    }
-    assert TACTIC_ATTRIBUTES == expected
-    rendered = format_tactic_metrics(
-        "Play-action",
-        {"PA loss rate": "0.1", "PA pressure rate": "0.2"},
-    )
-    assert rendered.index("PA loss rate") < rendered.index("PA pressure rate")
-    assert rendered.index("PA pressure rate") < rendered.index("Overall loss rate")
+def test_tactic_choices_come_from_the_backend_in_priority_order():
+    assert set(TACTIC_KEYS.values()) == set(TACTICS)
+    assert TACTIC_KEYS["Play-action protection"] == "play_action"
+    assert tactic_priorities("play_action") == [
+        "PA loss rate", "PA pressure rate", "Overall loss rate",
+        "PA sack rate", "Weight", "Penalty rate",
+    ]
 
 
-def test_reads_exact_player_fields_and_reports_unavailable_ones():
-    data = pd.DataFrame(
-        {
-            "key": [7, 7, 8],
-            "Loss_rate": [0.1, 0.1, 0.8],
-            "Pressure rate": [None, None, 0.3],
-            "weight": [320, 320, 300],
-        }
-    )
+def test_top_ranking_lists_centers_in_rank_order():
+    text = format_top_ranking(SAMPLE_RANKING, n=2)
 
-    values = tactic_metric_values(data, 7, "Traditional dropback")
-
-    assert values["Loss rate"] == "0.1"
-    assert values["Pressure rate"] == "Missing for this player"
-    assert values["Weight"] == "320"
-    assert values["Sack rate"] == "Not available in loaded data"
+    assert "Stunt & twist handling: top 2 centers" in text
+    assert text.index(" 1. Creed Humphrey (KC)") < text.index(" 2. Alex Mack (SF)")
+    assert "97.0%" in text and "94.7%" in text
 
 
-def test_reports_metrics_that_change_across_frames():
-    data = pd.DataFrame({"key": [7, 7], "Lateral speed": [1.0, 2.0]})
+def test_player_ranking_shows_rank_values_and_scores():
+    text = format_player_ranking(SAMPLE_RANKING, 53492)
 
-    assert tactic_metric_values(data, 7, "Rollouts")["Lateral speed"] == "Varies by frame"
+    assert "Rank 1 of 2" in text and "suitability 97.0%" in text
+    assert "Switch-block loss rate: 2.2%  (score 100/100, weight 60%)" in text
+    assert "Weight: 316 lb  (score 70/100, weight 40%)" in text
+    assert "Biggest concern: Weight" in text
+
+
+def test_unranked_players_are_reported_not_guessed():
+    text = format_player_ranking(SAMPLE_RANKING, 99999)
+
+    assert "Not ranked" in text and "150" in text
+
+
+def test_client_explains_how_to_start_an_unreachable_backend():
+    with socket.socket() as s:                      # a local port nothing listens on
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    with pytest.raises(BackendUnavailable, match="python app.py"):
+        RankingsClient(f"http://127.0.0.1:{port}", timeout=2).rankings("dropback")
 
 
 def test_player_options_are_unique_readable_and_exclude_ball():
