@@ -93,3 +93,16 @@ LONG_DEV_MIN_SECONDS = 3.0         # long_dev tactic: snaps where time_to_event 
 # ------------------------------------------------------------------------ benchmarks
 LOW_PERCENTILE = 10                # ideal if lower is better, floor if higher is better
 HIGH_PERCENTILE = 90               # floor if lower is better, ideal if higher is better
+
+# --------------------------------------------------------------------------- scoring
+TARGET_FULL_SCORE_WITHIN = 5       # target attribute: score 1 within +-5 (lb) of the target,
+TARGET_ZERO_SCORE_AT = 25          # falling linearly to 0 at +-25 (lb)
+NEUTRAL_SCORE = 0.5                # when ideal == floor, or a center has no value
+CONFIDENCE_HIGH_MIN_SNAPS = 60     # tactic snaps: High >= 60, Medium 25-59, Low < 25
+CONFIDENCE_MEDIUM_MIN_SNAPS = 25
+
+# ------------------------------------------------------------------ rankings output
+DEFAULT_LIMIT = 15                 # players returned when no limit is given
+MIN_LIMIT = 1
+MAX_LIMIT = 50
+CLI_TOP_N = 15                     # rows the CLI prints and exports per tactic
