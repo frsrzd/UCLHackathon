@@ -106,3 +106,10 @@ DEFAULT_LIMIT = 15                 # players returned when no limit is given
 MIN_LIMIT = 1
 MAX_LIMIT = 50
 CLI_TOP_N = 15                     # rows the CLI prints and exports per tactic
+
+# ---------------------------------------------------------------- local web server
+API_HOST = "127.0.0.1"
+API_PORT = 5001                    # not 5000: recent Macs reserve it for AirPlay Receiver
+CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173",    # Vite dev server
+                "http://localhost:4173", "http://127.0.0.1:4173"]    # vite preview
+FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"   # app.py serves the built UI if present
