@@ -26,6 +26,32 @@ outputs/        generated: CLI top-15 CSV/JSON per tactic
 frontend/       React (Vite) app
 ```
 
+## Formation viewer
+
+The optional desktop viewer animates real plays and lets you inspect player
+movement and available tactic metrics. Install dependencies from
+`requirements.txt`, then run it from the project root:
+
+```bash
+python -m backend.formation_viewer
+```
+
+By default, it loads the Big Data Bowl files from `data/raw/`. To use synthetic
+plays without loading the dataset, run:
+
+```bash
+python -m backend.formation_viewer --demo
+```
+
+Save a frame without opening a window with:
+
+```bash
+python -m backend.formation_viewer --snapshot outputs/formation.png --formation SHOTGUN
+```
+
+Use `--data path/to/bdb` to load a different Big Data Bowl data folder. The viewer
+reads the CSV and tracking files without modifying them.
+
 ## Workflow
 
 Work on your own branch (`backend`, `api`, `frontend`) and merge into `main` via pull request.
