@@ -9,9 +9,9 @@ and writes nothing to disk. It prints:
   2. the category labels config.py needs (dropBackType, pff_playAction,
      pff_blockType, pff_role, pff_positionLinedUp) and the player field formats
   3. how many players lined up at C on Pass Block snaps, and their snap counts
-  4. the fields the tactic filters use, measured on those centre snaps
+  4. the fields the tactic filters use, measured on those center snaps
   5. tracking (if present): event tags, and which snap / pass / sack events the
-     centre's own rows carry on his base snaps
+     center's own rows carry on his base snaps
 
 Unlike data_loader.py, this script reads each header first so it can REPORT a
 missing column instead of stopping on it. Labels are matched case-insensitively
@@ -111,8 +111,8 @@ def main():
           f"   e.g. {odd.head(3).tolist()}")
     print(f"players.weight   blank: {players['weight'].isna().sum():,}")
 
-    # ------------------------------------------------------------ 3. centre pool
-    header("3. Centres: Pass Block snaps lined up at C")
+    # ------------------------------------------------------------ 3. center pool
+    header("3. Centers: Pass Block snaps lined up at C")
     roles = scout["pff_role"].dropna().unique()
     role_lbl = [r for r in roles if r.lower() == "pass block"]
     rush_lbl = [r for r in roles if r.lower() == "pass rush"]
@@ -136,11 +136,11 @@ def main():
     print("\nplayers at or above each snap count:")
     for t in [25, 50, 100, 150, 200, 250, 300]:
         print(f"   >= {t:>3}: {(snaps['base_snaps'] >= t).sum()}")
-    print("\nall centres, most snaps first:")
+    print("\nall centers, most snaps first:")
     print(snaps.sort_values("base_snaps", ascending=False).to_string())
 
     # ------------------------------------------------- 4. tactic-filter fields
-    header("4. Fields the tactic filters use, on centre base snaps")
+    header("4. Fields the tactic filters use, on center base snaps")
     show_counts(base["pff_blockType"], "pff_blockType")
     show_counts(base["dropBackType"], "dropBackType")
     print("\npff_blockType x pff_playAction:")
@@ -159,15 +159,15 @@ def main():
                       how="left")
     show_counts(base["n_rushers"], "\nnumber of Pass Rush rows on the play")
 
-    # Penalties: compare foulNFLId* (float, often blank) to the centre's nflId.
+    # Penalties: compare foulNFLId* (float, often blank) to the center's nflId.
     foul_cols = ["foulNFLId1", "foulNFLId2", "foulNFLId3"]
     fouls = (plays.melt(id_vars=["gameId", "playId"], value_vars=foul_cols, value_name="nflId")
              .dropna(subset=["nflId"]).astype({"nflId": "int64"}))
-    centre_fouls = fouls[fouls["nflId"].isin(snaps.index)]
+    center_fouls = fouls[fouls["nflId"].isin(snaps.index)]
     keys = base[KEYS].drop_duplicates()
-    on_base = centre_fouls.merge(keys, on=KEYS, how="inner")
-    print(f"\nfouls charged to these centres: {len(centre_fouls)}   on their base snaps: "
-          f"{len(on_base)}   on other plays: {len(centre_fouls) - len(on_base)}")
+    on_base = center_fouls.merge(keys, on=KEYS, how="inner")
+    print(f"\nfouls charged to these centers: {len(center_fouls)}   on their base snaps: "
+          f"{len(on_base)}   on other plays: {len(center_fouls) - len(on_base)}")
 
     # --------------------------------------------------------------- 5. tracking
     header("5. Tracking")
@@ -185,7 +185,7 @@ def main():
         # Count each event once per play (it repeats on every player's row in that frame).
         ev = t.dropna(subset=["event"]).drop_duplicates(["gameId", "playId", "event"])
         play_events.update(ev["event"].value_counts().to_dict())
-        # The centre's own rows on his base snaps (ball rows have a blank nflId).
+        # The center's own rows on his base snaps (ball rows have a blank nflId).
         c = t.dropna(subset=["nflId"]).astype({"nflId": "int64"}).merge(keys, on=KEYS)
         dup_rows += c.duplicated(KEYS + ["frameId"]).sum()
         spans.append(c.groupby(KEYS)["frameId"].agg(["min", "max"]))
@@ -198,12 +198,12 @@ def main():
     print(pd.Series(play_events).sort_values(ascending=False).to_string())
 
     span = pd.concat(spans)
-    print(f"\ncentre base snaps: {len(keys):,}   with the centre's own tracking rows: "
+    print(f"\ncenter base snaps: {len(keys):,}   with the center's own tracking rows: "
           f"{len(span):,} ({len(span) / len(keys):.1%})   duplicate frame rows: {dup_rows}")
 
-    # One row per base snap, one column per event: the first frame the centre's rows carry it.
+    # One row per base snap, one column per event: the first frame the center's rows carry it.
     first = pd.concat(first_frames).unstack("event").reindex(span.index)
-    print("\nevents on the centre's own rows (count = his base snaps carrying the tag):")
+    print("\nevents on the center's own rows (count = his base snaps carrying the tag):")
     print(first.notna().sum().sort_values(ascending=False).to_string())
 
     no_frame = pd.Series(index=first.index, dtype="float64")   # used when a tag never occurs
@@ -271,7 +271,7 @@ def main():
     end_kind[run_frame.notna()] = "run tag only"
     end_kind[sack_frame.notna()] = "sack tag"
     end_kind[pass_frame.notna()] = "pass-forward tag"
-    print("\ncentre pressure allowed (hit/hurry/sack), by how the snap's tagging ends:")
+    print("\ncenter pressure allowed (hit/hurry/sack), by how the snap's tagging ends:")
     print(pressure.groupby(end_kind).agg(snaps="size", pressure_share="mean")
           .round(3).to_string())
 

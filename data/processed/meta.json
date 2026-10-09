@@ -1,0 +1,71 @@
+{
+  "generatedAt": "2026-10-09T11:32:50+00:00",
+  "trackingUsed": true,
+  "trackingFilesFound": 122,
+  "enabledTactics": [
+    "dropback",
+    "play_action",
+    "rollout",
+    "stunt_twist",
+    "blitz",
+    "long_dev"
+  ],
+  "rowCounts": {
+    "players.csv": 1679,
+    "plays.csv": 8557,
+    "pffScoutingData.csv": 188254,
+    "trackingRowsRead": 8314178,
+    "trackingRowsKept": 300105,
+    "snapsWithTrackingRows": 7125,
+    "snapsWithSnapTag": 7107,
+    "snapsWithTimeToEvent": 7107,
+    "snapsWithLateralSpeed": 7070,
+    "snapsWithDepthLost3s": 4789,
+    "centerBaseSnaps": 8557,
+    "centersWithBaseSnaps": 53,
+    "qualifyingCenters": 28,
+    "qualifyingBaseSnaps": 7125
+  },
+  "tacticSnaps": {
+    "dropback": 2680,
+    "play_action": 1693,
+    "rollout": 362,
+    "stunt_twist": 540,
+    "blitz": 1747,
+    "long_dev": 3194
+  },
+  "leagueRates": {
+    "loss_rate": 0.07171929824561403,
+    "pressure_rate": 0.04308771929824561,
+    "sack_rate": 0.004912280701754386,
+    "penalty_rate": 0.0026666666666666666
+  },
+  "settings": {
+    "MIN_BASE_SNAPS": 150,
+    "K_OVERALL": 50,
+    "K_TACTIC": 20,
+    "AGE_AS_OF": "2021-09-01",
+    "BLITZ_MIN_RUSHERS": 5,
+    "LONG_DEV_MIN_SECONDS": 3.0,
+    "LOW_PERCENTILE": 10,
+    "HIGH_PERCENTILE": 90,
+    "FRAMES_PER_SECOND": 10,
+    "LATERAL_WINDOW_FRAMES": 20,
+    "DEPTH_WINDOW_FRAMES": 30,
+    "SNAP_EVENTS": [
+      "ball_snap",
+      "autoevent_ballsnap"
+    ],
+    "PASS_FORWARD_EVENTS": [
+      "pass_forward",
+      "autoevent_passforward"
+    ],
+    "SACK_EVENTS": [
+      "qb_sack",
+      "qb_strip_sack"
+    ],
+    "RUN_EVENTS": [
+      "run"
+    ]
+  }
+}

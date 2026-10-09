@@ -1,0 +1,125 @@
+{
+  "method": "Percentiles across the 28 qualifying centers' values. Lower is better: ideal = 10th percentile, floor = 90th. Higher is better: ideal = 90th, floor = 10th. Target attributes (weight) are scored against the tactic's target.",
+  "attributes": {
+    "dropback_loss_rate": {
+      "better": "lower",
+      "ideal": 0.04837295277207182,
+      "floor": 0.1270073850551485,
+      "centers": 28
+    },
+    "dropback_pressure_rate": {
+      "better": "lower",
+      "ideal": 0.01353413162832709,
+      "floor": 0.07124600373034454,
+      "centers": 28
+    },
+    "dropback_sack_rate": {
+      "better": "lower",
+      "ideal": 0.00013508875313924414,
+      "floor": 0.010750374676604765,
+      "centers": 28
+    },
+    "penalty_rate": {
+      "better": "lower",
+      "ideal": 0.00040800530738611235,
+      "floor": 0.006165091630553961,
+      "centers": 28
+    },
+    "pa_loss_rate": {
+      "better": "lower",
+      "ideal": 0.03414291666730298,
+      "floor": 0.09354766987292153,
+      "centers": 28
+    },
+    "pa_pressure_rate": {
+      "better": "lower",
+      "ideal": 0.017163540162710083,
+      "floor": 0.058960852057043205,
+      "centers": 28
+    },
+    "loss_rate": {
+      "better": "lower",
+      "ideal": 0.040029179632886845,
+      "floor": 0.09784766994337264,
+      "centers": 28
+    },
+    "pa_sack_rate": {
+      "better": "lower",
+      "ideal": 0.00018513663966429606,
+      "floor": 0.012889975651421165,
+      "centers": 28
+    },
+    "rollout_loss_rate": {
+      "better": "lower",
+      "ideal": 0.027892212397754863,
+      "floor": 0.060502377151135066,
+      "centers": 28
+    },
+    "rollout_pressure_rate": {
+      "better": "lower",
+      "ideal": 0.014468489357925985,
+      "floor": 0.03654948229432228,
+      "centers": 28
+    },
+    "lateral_speed": {
+      "better": "higher",
+      "ideal": 2.7720833333333337,
+      "floor": 1.7838333333333334,
+      "centers": 28
+    },
+    "sw_loss_rate": {
+      "better": "lower",
+      "ideal": 0.05830878103836381,
+      "floor": 0.19813939747639805,
+      "centers": 28
+    },
+    "sw_pressure_rate": {
+      "better": "lower",
+      "ideal": 0.022689477237319074,
+      "floor": 0.1285738637365316,
+      "centers": 28
+    },
+    "blitz_loss_rate": {
+      "better": "lower",
+      "ideal": 0.05230504462897821,
+      "floor": 0.13946131135947443,
+      "centers": 28
+    },
+    "blitz_pressure_rate": {
+      "better": "lower",
+      "ideal": 0.023387866429259354,
+      "floor": 0.09072757002115517,
+      "centers": 28
+    },
+    "blitz_sack_rate": {
+      "better": "lower",
+      "ideal": 0.00018029020638100871,
+      "floor": 0.017974265673727487,
+      "centers": 28
+    },
+    "long_loss_rate": {
+      "better": "lower",
+      "ideal": 0.050238407507190386,
+      "floor": 0.10961277358639097,
+      "centers": 28
+    },
+    "long_pressure_rate": {
+      "better": "lower",
+      "ideal": 0.03997301235623634,
+      "floor": 0.08675297489274265,
+      "centers": 28
+    },
+    "depth_lost_3s": {
+      "better": "lower",
+      "ideal": 3.4651722193302104,
+      "floor": 4.019770491803279,
+      "centers": 28
+    },
+    "long_sack_rate": {
+      "better": "lower",
+      "ideal": 0.00012086485480645109,
+      "floor": 0.01892394455540026,
+      "centers": 28
+    }
+  }
+}
